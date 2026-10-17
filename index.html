@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bug Hunt | Ejaz Ahemad</title>
+<meta name="description" content="A quick QA game: read the test log, click the rows where actual does not match expected.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Archivo:wdth,wght@62..125,400..900&display=swap">
+<style>
+:root { --bg:#F2F5F3; --surface:#E7EDEA; --ink:#13201B; --muted:#4F625A; --line:#C6D3CC; --accent:#1D6B58; --accent-soft:#D3E8E0; --on-accent:#F2F5F3; --bad:#B42318; --bad-soft:#F8DAD6;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif; --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#0E1613; --surface:#16211D; --ink:#E4EDE9; --muted:#9BB0A7; --line:#2A3A34; --accent:#5CC3A4; --accent-soft:#17332B; --on-accent:#0E1613; --bad:#F97066; --bad-soft:#3A1A17; color-scheme:dark; } }
+:root[data-theme="dark"]{ --bg:#0E1613; --surface:#16211D; --ink:#E4EDE9; --muted:#9BB0A7; --line:#2A3A34; --accent:#5CC3A4; --accent-soft:#17332B; --on-accent:#0E1613; --bad:#F97066; --bad-soft:#3A1A17; color-scheme:dark; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--body);padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.wrap{max-width:900px;margin:0 auto}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--line);font:500 .8rem var(--mono);text-transform:uppercase;letter-spacing:.08em}
+.top a{color:var(--muted);text-decoration:none}
+h1{font-family:var(--display);font-stretch:118%;font-weight:800;font-size:clamp(1.9rem,6vw,3rem);line-height:1.05;margin:34px 0 10px}
+.lead{color:var(--muted);max-width:44em;margin:0 0 22px}
+.hud{display:flex;flex-wrap:wrap;gap:10px 30px;align-items:center;margin-bottom:14px;font:500 .9rem var(--mono)}
+.hud span b{font-size:1.25rem;font-weight:500;color:var(--accent)}
+.btn{font:500 .95rem var(--body);padding:10px 18px;border-radius:4px;border:1.5px solid var(--accent);background:var(--accent);color:var(--on-accent);cursor:pointer}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;min-width:560px;font:400 .92rem var(--mono)}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:500;text-transform:uppercase;letter-spacing:.06em;font-size:.72rem;color:var(--muted);background:var(--surface)}
+tr:last-child td{border-bottom:0}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--surface)}
+tbody tr:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+tr.found td{background:var(--accent-soft)}
+tr.false td{background:var(--bad-soft)}
+tr.missed td{box-shadow:inset 0 0 0 1px var(--bad)}
+tr.done{cursor:default}
+.msg{margin:16px 0 0;font:500 .95rem var(--mono);min-height:1.6em}
+.board{margin-top:18px;font:400 .85rem var(--mono);color:var(--muted)}
+.note{color:var(--muted);font-size:.85rem;margin-top:30px;border-top:1px solid var(--line);padding-top:14px}
+@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.shake{animation:shake .25s}
+@media (prefers-reduced-motion:reduce){.shake{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><a href="https://ajjuahmad.github.io/#projects">&larr; Portfolio</a><span>Sample project &middot; QA game</span></div>
+  <h1>Bug Hunt</h1>
+  <p class="lead">Each row is a test result. A row is a defect when Actual does not match Expected. Click every defect before time runs out. A wrong click costs 5 points. Three rounds, more bugs each time.</p>
+
+  <div class="hud">
+    <span>Round <b id="round">0</b>/3</span>
+    <span>Bugs left <b id="left">0</b></span>
+    <span>Time <b id="time">0</b>s</span>
+    <span>Score <b id="score">0</b></span>
+    <button class="btn" id="start" type="button">Start</button>
+  </div>
+
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Test input</th><th>Expected</th><th>Actual</th><th>Result</th></tr></thead>
+    <tbody id="tbody"><tr><td colspan="5" style="color:var(--muted)">Press Start to load the first test log.</td></tr></tbody>
+  </table></div>
+  <p class="msg" id="msg" role="status"></p>
+  <p class="board" id="board"></p>
+
+  <p class="note">Sample project by Ejaz Ahemad, built with AI assistance. Test cases are generated fresh each round.</p>
+</div>
+<script>
+(function(){
+  var WORDS=["report","network","bridge","queue","packet","router","switch","buffer"];
+  function rnd(n){return Math.floor(Math.random()*n)}
+  function makeCase(){
+    var t=rnd(5),a=2+rnd(19),b=2+rnd(19),w=WORDS[rnd(WORDS.length)],c;
+    if(t===0)c={input:"add("+a+", "+b+")",exp:String(a+b),bad:function(){return String(a+b+(rnd(2)?1:-1)*(1+rnd(3)))}};
+    else if(t===1)c={input:"multiply("+a+", "+b+")",exp:String(a*b),bad:function(){return String(a*b+(rnd(2)?1:-1)*(1+rnd(4)))}};
+    else if(t===2)c={input:'upper("'+w+'")',exp:w.toUpperCase(),bad:function(){return w.charAt(0).toUpperCase()+w.slice(1)}};
+    else if(t===3)c={input:'length("'+w+'")',exp:String(w.length),bad:function(){return String(w.length+(rnd(2)?1:-1))}};
+    else c={input:'reverse("'+w+'")',exp:w.split("").reverse().join(""),bad:function(){return w}};
+    return c;
+  }
+  function buildRound(bugs){
+    var rows=[],i;
+    for(i=0;i<8;i++){var c=makeCase();rows.push({input:c.input,exp:c.exp,act:c.exp,isBug:false,bad:c.bad})}
+    var idx=[0,1,2,3,4,5,6,7].sort(function(){return Math.random()-.5}).slice(0,bugs);
+    idx.forEach(function(k){rows[k].act=rows[k].bad();rows[k].isBug=true});
+    return rows;
+  }
+  window.__bh={buildRound:buildRound};
+  var S={round:0,score:0,left:0,time:0,rows:[],timer:null,active:false};
+  var $=function(id){return document.getElementById(id)};
+  function hud(){$("round").textContent=S.round;$("left").textContent=S.left;$("time").textContent=S.time;$("score").textContent=S.score}
+  function render(){
+    var tb=$("tbody");tb.innerHTML="";
+    S.rows.forEach(function(r,i){
+      var tr=document.createElement("tr");tr.tabIndex=0;tr.setAttribute("role","button");
+      tr.setAttribute("aria-label","Test "+(i+1)+": "+r.input+", expected "+r.exp+", actual "+r.act);
+      [i+1,r.input,r.exp,r.act,r.state||"passed?"].forEach(function(v,j){var td=document.createElement("td");td.textContent=v;if(j===4)td.style.color="var(--muted)";tr.appendChild(td)});
+      function pick(){choose(i,tr)}
+      tr.addEventListener("click",pick);
+      tr.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();pick()}});
+      tb.appendChild(tr);r.el=tr;
+    });
+  }
+  function choose(i,tr){
+    if(!S.active)return;var r=S.rows[i];if(r.clicked)return;r.clicked=true;
+    var cells=tr.children;
+    if(r.isBug){S.score+=10;S.left--;tr.className="found done";cells[4].textContent="DEFECT logged";cells[4].style.color="var(--accent)"}
+    else{S.score=Math.max(0,S.score-5);tr.className="false done shake";cells[4].textContent="false alarm (-5)";cells[4].style.color="var(--bad)"}
+    hud();
+    if(S.left===0)endRound(true);
+  }
+  function endRound(won){
+    clearInterval(S.timer);S.active=false;
+    var bonus=0;
+    if(won){bonus=S.time*2;S.score+=bonus}
+    S.rows.forEach(function(r){if(r.isBug&&!r.clicked){r.el.className="missed done";r.el.children[4].textContent="missed defect";r.el.children[4].style.color="var(--bad)"}});
+    hud();
+    var msg=$("msg"),btn=$("start");
+    if(S.round<3){
+      msg.textContent=(won?"All defects found. Time bonus +"+bonus+".":"Time is up. Some defects were missed.")+" Next round has more bugs.";
+      btn.textContent="Next round";btn.hidden=false;
+    }else{
+      var best=0;try{best=+localStorage.getItem("bughunt-best")||0;if(S.score>best){best=S.score;localStorage.setItem("bughunt-best",String(best))}}catch(e){}
+      msg.textContent="Finished. Final score "+S.score+".";
+      $("board").textContent=best?"Best on this device: "+best:"";
+      btn.textContent="Play again";btn.hidden=false;S.round=0;S.score=0;
+    }
+  }
+  function startRound(){
+    if(S.round===0&&S.score===0)$("board").textContent="";
+    S.round++;var bugs=S.round+1;S.left=bugs;S.time=30-(S.round-1)*5;
+    S.rows=buildRound(bugs);S.active=true;$("msg").textContent="Find "+bugs+" defects.";$("start").hidden=true;
+    render();hud();
+    S.timer=setInterval(function(){S.time--;hud();if(S.time<=0)endRound(false)},1000);
+  }
+  $("start").addEventListener("click",function(){S.score=S.round===0?0:S.score;startRound()});
+  hud();
+})();
+</script>
+</body>
+</html>
